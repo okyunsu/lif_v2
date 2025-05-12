@@ -30,23 +30,23 @@ class RatioService:
                 FROM financials f
                 JOIN companies c ON f.corp_code = c.corp_code
                 WHERE c.corp_name = :company_name
-                AND f.bsns_year IN (
-                    SELECT DISTINCT bsns_year
+                    AND f.bsns_year IN (
+                        SELECT DISTINCT bsns_year 
                     FROM financials f2
                     JOIN companies c2 ON f2.corp_code = c2.corp_code
                     WHERE c2.corp_name = :company_name
-                    ORDER BY bsns_year DESC
-                    LIMIT 3
-                )
+                        ORDER BY bsns_year DESC 
+                        LIMIT 3
+                    )
                 ORDER BY f.bsns_year DESC, f.ord
-            """)
+                """)
             result = await self.db_session.execute(query, {"company_name": company_name})
             rows = result.mappings().all()  # 딕셔너리 리스트
 
             if not rows:
                 logger.error(f"재무제표 데이터가 없습니다: {company_name}")
                 raise ValueError(f"재무제표 데이터가 없습니다: {company_name}")
-
+            
             # 2. 데이터 전처리 (연도별, 계정명별로 정리)
             years_data = {}
             for row in rows:

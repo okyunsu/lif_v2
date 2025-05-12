@@ -4,6 +4,11 @@ docker-compose up -d            # 전체 서비스 백그라운드로 실행
 docker-compose down             # 전체 서비스 중지 및 컨테이너 제거
 docker-compose down --volumes   # 전체 서비스 중지 및 컨테이너, 볼륨 제거
 
+# 프로젝트 이미지 삭제 관련
+docker-compose down              # 먼저 실행 중인 컨테이너 중지
+docker rmi $(docker images 'api-servcer*' -q)  # 프로젝트 관련 이미지만 삭제
+docker system prune -f           # 사용하지 않는 리소스 정리 (이미지, 컨테이너, 네트워크)
+
 # 개별 서비스 관련
 docker-compose up -d gateway           # gateway 서비스만 백그라운드로 실행
 docker-compose up -d financeservice    # finance 서비스만 백그라운드로 실행
@@ -45,4 +50,5 @@ docker-compose build --no-cache financeservice  # finance 서비스 캐시 없�
 docker-compose build --no-cache esgservice      # esg 서비스 캐시 없이 재빌드
 docker-compose build --no-cache stockservice    # stock 서비스 캐시 없이 재빌드
 
-psql -U postgres -d your_database_name
+# 또는 간단히 재시작
+docker-compose restart

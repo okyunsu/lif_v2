@@ -1,11 +1,11 @@
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import sys
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-import logging
 from app.api.fin_router import router as fin_api_router
+from app.foundation.infra.scheduler.financial_scheduler import financial_scheduler
 
 # 로깅 설정
 logging.basicConfig(
@@ -22,8 +22,14 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Finance API 서비스 시작")
+    # 스케줄러 시작
+    financial_scheduler.start()
+    logger.info("재무제표 데이터 자동 크롤링 스케줄러가 시작되었습니다.")
     yield
     logger.info("🛑 Finance API 서비스 종료")
+    # 스케줄러 종료
+    financial_scheduler.shutdown()
+    logger.info("재무제표 데이터 자동 크롤링 스케줄러가 종료되었습니다.")
 
 
 # ✅ FastAPI 앱 생성 
@@ -50,4 +56,14 @@ app.include_router(fin_api_router, prefix="/fin", tags=["Finance API"])
 
 # ✅ 서브 라우터 등록
 app.include_router(fin_router, tags=["Finance API"])
+
+@app.get("/")
+async def root():
+    """루트 엔드포인트"""
+    return {"message": "Finance Service API에 오신 것을 환영합니다!"}
+
+# 애플리케이션 실행 (uvicorn에서 실행 시 사용되지 않음)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 
