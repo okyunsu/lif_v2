@@ -6,18 +6,20 @@ import math
 logger = logging.getLogger(__name__)
 
 def to_float_list(lst, n):
-    # None, NaN, 잘못된 값이 있으면 0.0으로 변환, 길이 안 맞으면 빈 리스트
+    # None, NaN은 그대로 유지, 잘못된 값만 None으로 변환, 길이 안 맞으면 None 리스트
     if not isinstance(lst, list) or len(lst) != n:
-        return [0.0] * n
+        return [None] * n
     result = []
     for x in lst:
         try:
-            if x is None or (isinstance(x, float) and math.isnan(x)):
-                result.append(0.0)
+            if x is None:
+                result.append(None)
+            elif isinstance(x, float) and math.isnan(x):
+                result.append(None)
             else:
                 result.append(float(x))
         except Exception:
-            result.append(0.0)
+            result.append(None)
     return result
 
 class ResponseBuilder:

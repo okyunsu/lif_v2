@@ -47,7 +47,7 @@ class DartApiService:
         
         try:
             content = await self._make_api_request(self.CORP_CODE_URL, {"crtfc_key": self.api_key})
-            companies = self._parse_company_xml(content, limit)
+            companies = await self._parse_company_xml(content, limit)
             logger.info(f"상위 {len(companies)}개 회사 조회 완료")
             return companies
         except Exception as e:
@@ -91,7 +91,7 @@ class DartApiService:
         
         try:
             content = await self._make_api_request(self.CORP_CODE_URL, {"crtfc_key": self.api_key})
-            company = self._find_company_by_name(content, company_name)
+            company = await self._find_company_by_name(content, company_name)
             logger.info(f"회사 정보를 찾았습니다: {company_name}")
             return company
         except Exception as e:
@@ -104,7 +104,7 @@ class DartApiService:
         
         # 연도 설정
         current_year = datetime.now().year
-        target_year = self._determine_target_year(year, current_year)
+        target_year = await self._determine_target_year(year, current_year)
         
         # 사업보고서 조회
         statements = []
@@ -112,7 +112,7 @@ class DartApiService:
         
         for reprt_code, reprt_name in report_codes:
             # 기본 파라미터 설정
-            params = self._prepare_financial_statement_params(corp_code, target_year, reprt_code)
+            params = await self._prepare_financial_statement_params(corp_code, target_year, reprt_code)
             
             # 재무상태표와 손익계산서 조회
             bs_is_statements = await self._fetch_bs_is_statements(params, target_year, reprt_name)
@@ -157,7 +157,7 @@ class DartApiService:
                     raise Exception(f"API 요청 실패: {response.status}")
                 return await response.json()
 
-    def _parse_company_xml(self, content: bytes, limit: int) -> List[CompanySchema]:
+    async def _parse_company_xml(self, content: bytes, limit: int) -> List[CompanySchema]:
         """회사 정보 XML을 파싱하여 CompanySchema 리스트로 반환합니다."""
         companies = []
         with zipfile.ZipFile(BytesIO(content)) as zip_file:
@@ -181,7 +181,7 @@ class DartApiService:
                             break
         return companies
 
-    def _find_company_by_name(self, content: bytes, company_name: str) -> CompanySchema:
+    async def _find_company_by_name(self, content: bytes, company_name: str) -> CompanySchema:
         """회사명으로 회사 정보를 찾아 반환합니다."""
         with zipfile.ZipFile(BytesIO(content)) as zip_file:
             with zip_file.open('CORPCODE.xml') as xml_file:
@@ -202,7 +202,7 @@ class DartApiService:
                 logger.error(f"회사명 '{company_name}'을 찾을 수 없습니다.")
                 raise ValueError(f"회사명 '{company_name}'을 찾을 수 없습니다.")
 
-    def _determine_target_year(self, year: Optional[int], current_year: int) -> int:
+    async def _determine_target_year(self, year: Optional[int], current_year: int) -> int:
         """조회할 연도를 결정합니다."""
         if year is None or not isinstance(year, int):
             target_year = current_year - 1
@@ -212,7 +212,7 @@ class DartApiService:
             logger.info(f"{target_year}년도 데이터를 조회합니다.")
         return target_year
 
-    def _prepare_financial_statement_params(self, corp_code: str, year: int, reprt_code: str) -> Dict[str, str]:
+    async def _prepare_financial_statement_params(self, corp_code: str, year: int, reprt_code: str) -> Dict[str, str]:
         """재무제표 API 요청 파라미터를 준비합니다."""
         return {
             "crtfc_key": self.api_key,

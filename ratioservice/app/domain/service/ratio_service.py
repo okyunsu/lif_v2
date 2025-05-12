@@ -1,9 +1,9 @@
 from typing import Dict, Any, Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
-from sqlalchemy import text
 
 from app.domain.model.schema.schema import FinancialMetricsResponse
+from app.domain.repository.ratio_repository import get_financial_data, save_financial_ratios, get_saved_financial_ratios
 from .financial_data_processor import FinancialDataProcessor
 from .ratio_calculator import RatioCalculator
 from .growth_rate_calculator import GrowthRateCalculator
@@ -24,52 +24,35 @@ class RatioService:
     async def calculate_financial_ratios(self, company_name: str, year: Optional[int] = None) -> FinancialMetricsResponse:
         """financials 테이블에서 데이터 조회 후 재무비율 계산"""
         try:
-            # 1. financials 테이블에서 데이터 조회
-            query = text("""
-                SELECT f.bsns_year, f.account_nm, f.thstrm_amount, f.frmtrm_amount, f.bfefrmtrm_amount
-                FROM financials f
-                JOIN companies c ON f.corp_code = c.corp_code
-                WHERE c.corp_name = :company_name
-                    AND f.bsns_year IN (
-                        SELECT DISTINCT bsns_year 
-                    FROM financials f2
-                    JOIN companies c2 ON f2.corp_code = c2.corp_code
-                    WHERE c2.corp_name = :company_name
-                        ORDER BY bsns_year DESC 
-                        LIMIT 3
-                    )
-                ORDER BY f.bsns_year DESC, f.ord
-                """)
-            result = await self.db_session.execute(query, {"company_name": company_name})
-            rows = result.mappings().all()  # 딕셔너리 리스트
-
-            if not rows:
+            # 1. Repository 함수를 통해 재무 데이터 조회
+            financial_data = await get_financial_data(self.db_session, company_name, year)
+            
+            if not financial_data:
                 logger.error(f"재무제표 데이터가 없습니다: {company_name}")
                 raise ValueError(f"재무제표 데이터가 없습니다: {company_name}")
             
             # 2. 데이터 전처리 (연도별, 계정명별로 정리)
-            years_data = {}
-            for row in rows:
-                year = row["bsns_year"]
-                if year not in years_data:
-                    years_data[year] = {}
-                account = row["account_nm"]
-                years_data[year][account] = {
-                    "thstrm": float(row["thstrm_amount"] or 0),
-                    "frmtrm": float(row["frmtrm_amount"] or 0),
-                    "bfefrmtrm": float(row["bfefrmtrm_amount"] or 0)
-                }
+            years_data = self.data_processor.preprocess_financial_data(financial_data)
 
             # 3. 대상 연도 결정
             target_years = self.data_processor.get_target_years(years_data)
+            
+            # 4. 저장된 재무비율 확인 - 이미 계산된 데이터가 있으면 바로 반환
+            saved_ratios = await get_saved_financial_ratios(self.db_session, company_name, target_years)
+            if saved_ratios and len(saved_ratios) == len(target_years):
+                logger.info(f"{company_name}의 저장된 재무비율 데이터를 반환합니다 (연도: {', '.join(target_years)})")
+                return self._build_response_from_saved_ratios(company_name, target_years, saved_ratios)
 
-            # 4. 재무비율 계산
+            # 5. 재무비율 계산 - RatioCalculator에 위임
             ratios = self.ratio_calculator.calculate_all_ratios(years_data, target_years)
 
-            # 5. 성장률 계산
+            # 6. 성장률 계산 - GrowthRateCalculator에 위임
             growth_rates = self.growth_calculator.calculate_growth_rates(years_data, target_years)
 
-            # 6. 응답 생성
+            # 7. 재무비율 저장
+            await self._save_calculated_ratios(financial_data[0]["corp_code"], company_name, target_years, ratios, growth_rates)
+
+            # 8. 응답 생성
             return self.response_builder.build_metrics_response(
                 company_name=company_name,
                 target_years=target_years,
@@ -78,4 +61,74 @@ class RatioService:
             )
         except Exception as e:
             logger.error(f"재무비율 계산 중 오류 발생: {str(e)}")
-            raise 
+            raise
+    
+    def _build_response_from_saved_ratios(self, company_name: str, target_years: List[str], 
+                                         saved_ratios: List[Dict[str, Any]]) -> FinancialMetricsResponse:
+        """저장된 재무비율 데이터로부터 응답을 생성합니다."""
+        # 저장된 데이터를 응답 형식에 맞게 변환
+        ratios = {
+            "debt_ratios": [],
+            "current_ratios": [],
+            "operating_margins": [],
+            "net_margins": [],
+            "roe_values": [],
+            "roa_values": []
+        }
+        
+        growth_rates = {
+            "revenue_growth": [],
+            "net_income_growth": []
+        }
+        
+        # 연도 순서대로 데이터 정렬
+        year_to_ratio = {ratio["bsns_year"]: ratio for ratio in saved_ratios}
+        
+        for year in target_years:
+            ratio = year_to_ratio.get(year, {})
+            ratios["debt_ratios"].append(ratio.get("debt_ratio"))
+            ratios["current_ratios"].append(ratio.get("current_ratio"))
+            ratios["operating_margins"].append(ratio.get("operating_profit_ratio"))
+            ratios["net_margins"].append(ratio.get("net_profit_ratio"))
+            ratios["roe_values"].append(ratio.get("roe"))
+            ratios["roa_values"].append(ratio.get("roa"))
+            
+            growth_rates["revenue_growth"].append(ratio.get("sales_growth"))
+            growth_rates["net_income_growth"].append(ratio.get("eps_growth"))
+        
+        return self.response_builder.build_metrics_response(
+            company_name=company_name,
+            target_years=target_years,
+            ratios=ratios,
+            growth_rates=growth_rates
+        )
+            
+    async def _save_calculated_ratios(self, corp_code: str, company_name: str, 
+                                     target_years: List[str], 
+                                     ratios: Dict[str, List[Optional[float]]], 
+                                     growth_rates: Dict[str, List[Optional[float]]]) -> None:
+        """계산된 재무비율을 DB에 저장합니다."""
+        try:
+            for i, year in enumerate(target_years):
+                ratio_data = {
+                    "corp_code": corp_code,
+                    "corp_name": company_name,
+                    "bsns_year": year,
+                    "debt_ratio": ratios["debt_ratios"][i],
+                    "current_ratio": ratios["current_ratios"][i],
+                    "interest_coverage_ratio": None,  # 계산하지 않음
+                    "operating_profit_ratio": ratios["operating_margins"][i],
+                    "net_profit_ratio": ratios["net_margins"][i],
+                    "roe": ratios["roe_values"][i],
+                    "roa": ratios["roa_values"][i],
+                    "debt_dependency": None,  # 계산하지 않음
+                    "cash_flow_debt_ratio": None,  # 계산하지 않음
+                    "sales_growth": growth_rates["revenue_growth"][i],
+                    "operating_profit_growth": None,  # 계산하지 않음
+                    "eps_growth": growth_rates["net_income_growth"][i]
+                }
+                await save_financial_ratios(self.db_session, ratio_data)
+            logger.info(f"{company_name}의 재무비율 저장 완료 (연도: {', '.join(target_years)})")
+        except Exception as e:
+            logger.error(f"재무비율 저장 중 오류 발생: {str(e)}")
+            # 저장 실패해도 계산 결과는 반환 

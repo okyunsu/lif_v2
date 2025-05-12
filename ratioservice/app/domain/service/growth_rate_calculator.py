@@ -1,49 +1,49 @@
 from typing import Dict, Optional, List
 import logging
-from .financial_data_processor import FinancialDataProcessor
 
 logger = logging.getLogger(__name__)
 
 class GrowthRateCalculator:
     """성장률 계산 클래스"""
     
-    def __init__(self):
-        self.data_processor = FinancialDataProcessor()
-    
-    def calculate_growth_rates(self, years_data: Dict[str, Dict[str, Dict[str, float]]], target_years: List[str]) -> Dict[str, List[Optional[float]]]:
-        """매출액과 당기순이익의 성장률을 계산합니다."""
+    def calculate_growth_rates(self, years_data: Dict[str, Dict[str, Dict[str, float]]], target_years: List[str], extracted_values: Dict[str, Dict[str, float]] = None) -> Dict[str, List[Optional[float]]]:
+        """매출액과 당기순이익의 성장률을 계산합니다.
+        
+        Args:
+            years_data: 연도별 재무제표 데이터
+            target_years: 대상 연도 목록
+            extracted_values: 미리 추출된 재무 값 (없으면 내부에서 추출)
+        """
         growth_rates = {
             "revenue_growth": [],
             "net_income_growth": []
         }
         
-        for i in range(len(target_years)):
+        # 첫 해는 성장률 계산 불가능하므로 None 추가
+        growth_rates["revenue_growth"].append(None)
+        growth_rates["net_income_growth"].append(None)
+        
+        # 두 번째 해부터 성장률 계산
+        for i in range(1, len(target_years)):
             current_year = target_years[i]
-            if i == 0:
-                growth_rates["revenue_growth"].append(None)
-                growth_rates["net_income_growth"].append(None)
-                continue
-                
             previous_year = target_years[i-1]
-            current_values = self.data_processor.extract_financial_values(years_data.get(current_year, {}), "growth")
-            previous_values = self.data_processor.extract_financial_values(years_data.get(previous_year, {}), "growth")
             
-            growth_rates["revenue_growth"].append(
-                self.calculate_revenue_growth(current_values, previous_values)
-            )
-            growth_rates["net_income_growth"].append(
-                self.calculate_net_income_growth(current_values, previous_values)
-            )
+            # 현재 연도 데이터
+            current_revenue = years_data.get(current_year, {}).get("매출액", {}).get("thstrm", 0)
+            current_net_income = years_data.get(current_year, {}).get("당기순이익", {}).get("thstrm", 0)
+            
+            # 이전 연도 데이터
+            previous_revenue = years_data.get(previous_year, {}).get("매출액", {}).get("thstrm", 0)
+            previous_net_income = years_data.get(previous_year, {}).get("당기순이익", {}).get("thstrm", 0)
+            
+            # 성장률 계산
+            revenue_growth = self._calculate_growth_rate(current_revenue, previous_revenue)
+            net_income_growth = self._calculate_growth_rate(current_net_income, previous_net_income)
+            
+            growth_rates["revenue_growth"].append(revenue_growth)
+            growth_rates["net_income_growth"].append(net_income_growth)
         
         return growth_rates
-
-    def calculate_revenue_growth(self, current: Dict[str, float], previous: Dict[str, float]) -> Optional[float]:
-        """매출액 성장률을 계산합니다."""
-        return self._calculate_growth_rate(current["revenue"], previous["revenue"])
-
-    def calculate_net_income_growth(self, current: Dict[str, float], previous: Dict[str, float]) -> Optional[float]:
-        """당기순이익 성장률을 계산합니다."""
-        return self._calculate_growth_rate(current["net_income"], previous["net_income"])
 
     def _calculate_growth_rate(self, current: float, previous: float) -> Optional[float]:
         """성장률을 계산합니다."""

@@ -1,14 +1,10 @@
 from typing import Dict, Optional, List
 import logging
-from .financial_data_processor import FinancialDataProcessor
 
 logger = logging.getLogger(__name__)
 
 class RatioCalculator:
     """재무비율 계산 클래스"""
-    
-    def __init__(self):
-        self.data_processor = FinancialDataProcessor()
     
     def calculate_all_ratios(self, years_data: Dict[str, Dict[str, Dict[str, float]]], target_years: List[str]) -> Dict[str, List[Optional[float]]]:
         """모든 재무비율을 계산합니다."""
@@ -23,40 +19,26 @@ class RatioCalculator:
         
         for year in target_years:
             year_data = years_data.get(year, {})
-            financial_values = self.data_processor.extract_financial_values(year_data, "ratio")
             
-            ratios["operating_margins"].append(self.calculate_operating_margin(financial_values))
-            ratios["net_margins"].append(self.calculate_net_margin(financial_values))
-            ratios["roe_values"].append(self.calculate_roe(financial_values))
-            ratios["roa_values"].append(self.calculate_roa(financial_values))
-            ratios["debt_ratios"].append(self.calculate_debt_ratio(financial_values))
-            ratios["current_ratios"].append(self.calculate_current_ratio(financial_values))
+            # 필요한 값 직접 추출
+            total_assets = year_data.get("자산총계", {}).get("thstrm", 0)
+            total_liabilities = year_data.get("부채총계", {}).get("thstrm", 0)
+            current_assets = year_data.get("유동자산", {}).get("thstrm", 0)
+            current_liabilities = year_data.get("유동부채", {}).get("thstrm", 0)
+            total_equity = year_data.get("자본총계", {}).get("thstrm", 0)
+            revenue = year_data.get("매출액", {}).get("thstrm", 0)
+            operating_profit = year_data.get("영업이익", {}).get("thstrm", 0)
+            net_income = year_data.get("당기순이익", {}).get("thstrm", 0)
+            
+            # 비율 계산
+            ratios["operating_margins"].append(self._safe_divide(operating_profit, revenue) * 100)
+            ratios["net_margins"].append(self._safe_divide(net_income, revenue) * 100)
+            ratios["roe_values"].append(self._safe_divide(net_income, total_equity) * 100)
+            ratios["roa_values"].append(self._safe_divide(net_income, total_assets) * 100)
+            ratios["debt_ratios"].append(self._safe_divide(total_liabilities, total_equity) * 100)
+            ratios["current_ratios"].append(self._safe_divide(current_assets, current_liabilities) * 100)
         
         return ratios
-
-    def calculate_operating_margin(self, values: Dict[str, float]) -> Optional[float]:
-        """영업이익률을 계산합니다."""
-        return self._safe_divide(values["operating_profit"], values["revenue"]) * 100
-
-    def calculate_net_margin(self, values: Dict[str, float]) -> Optional[float]:
-        """순이익률을 계산합니다."""
-        return self._safe_divide(values["net_income"], values["revenue"]) * 100
-
-    def calculate_roe(self, values: Dict[str, float]) -> Optional[float]:
-        """ROE를 계산합니다."""
-        return self._safe_divide(values["net_income"], values["total_equity"]) * 100
-
-    def calculate_roa(self, values: Dict[str, float]) -> Optional[float]:
-        """ROA를 계산합니다."""
-        return self._safe_divide(values["net_income"], values["total_assets"]) * 100
-
-    def calculate_debt_ratio(self, values: Dict[str, float]) -> Optional[float]:
-        """부채비율을 계산합니다."""
-        return self._safe_divide(values["total_liabilities"], values["total_equity"]) * 100
-
-    def calculate_current_ratio(self, values: Dict[str, float]) -> Optional[float]:
-        """유동비율을 계산합니다."""
-        return self._safe_divide(values["current_assets"], values["current_liabilities"]) * 100
 
     def _safe_divide(self, numerator: float, denominator: float) -> Optional[float]:
         """안전한 나눗셈을 수행합니다."""

@@ -47,8 +47,8 @@ class FinancialDataProcessor:
             "net_income": year_data.get("당기순이익", {}).get("thstrm", 0)
         }
         
+        # 성장률 계산에는 매출액과 당기순이익만 필요
         if values_type == "growth":
             return {k: v for k, v in base_values.items() if k in ["revenue", "net_income"]}
-        elif values_type == "ratio":
-            return base_values
+            
         return base_values 

@@ -47,7 +47,7 @@ app.add_middleware(
 )
 
 # ✅ 메인 라우터 생성
-gateway_router = APIRouter(prefix="/e/v3", tags=["Gateway API"])
+gateway_router = APIRouter(prefix="/e/v2", tags=["Gateway API"])
 
 # ✅ 헬스 체크 엔드포인트 추가
 @gateway_router.get("/health", summary="테스트 엔드포인트")
