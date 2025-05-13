@@ -52,6 +52,7 @@ async def get_financial_data(db_session: AsyncSession, company_name: str, year: 
             year_condition = "AND f.bsns_year = :year"
             params["year"] = str(year)
         else:
+            # 최근 3개 연도 데이터 조회
             year_condition = """AND f.bsns_year IN (
                 SELECT DISTINCT bsns_year 
                 FROM financials f2
@@ -61,9 +62,19 @@ async def get_financial_data(db_session: AsyncSession, company_name: str, year: 
                 LIMIT 3
             )"""
         
+        # 쿼리 수정: JOIN 구문 명확히 하고 필요한 모든 필드 포함
         query = text(f"""
-            SELECT f.bsns_year, f.sj_div, s.sj_nm, f.account_nm, 
-                   f.thstrm_amount, f.frmtrm_amount, f.bfefrmtrm_amount
+            SELECT 
+                f.bsns_year, 
+                f.sj_div, 
+                s.sj_nm, 
+                f.account_nm, 
+                f.thstrm_amount, 
+                f.frmtrm_amount, 
+                f.bfefrmtrm_amount,
+                c.corp_code,
+                c.corp_name,
+                c.stock_code
             FROM financials f
             JOIN companies c ON f.corp_code = c.corp_code
             JOIN statement s ON f.sj_div = s.sj_div
@@ -72,10 +83,12 @@ async def get_financial_data(db_session: AsyncSession, company_name: str, year: 
             ORDER BY f.bsns_year DESC, f.sj_div, f.ord
         """)
         
-        return await execute_query(db_session, query, params)
+        result = await execute_query(db_session, query, params)
+        logger.info(f"{company_name}의 재무제표 데이터 {len(result)}개 조회 완료")
+        return result
     except Exception as e:
         logger.error(f"데이터 조회 중 오류 발생: {str(e)}")
-        return []
+        raise  # 오류를 상위로 전파하여 문제 해결 가능하도록 함
 
 async def get_saved_financial_ratios(db_session: AsyncSession, company_name: str, years: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """저장된 재무비율을 조회합니다."""
@@ -85,8 +98,12 @@ async def get_saved_financial_ratios(db_session: AsyncSession, company_name: str
         # 연도 조건 추가
         year_condition = ""
         if years:
-            year_condition = "AND bsns_year IN :years"
-            params["years"] = tuple(years) if len(years) > 1 else f"('{years[0]}')"
+            if len(years) == 1:
+                year_condition = "AND bsns_year = :year"
+                params["year"] = years[0]
+            else:
+                year_condition = "AND bsns_year = ANY(:years)"
+                params["years"] = years
         
         query = text(f"""
             SELECT 

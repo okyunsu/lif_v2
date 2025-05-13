@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 class GrowthRateCalculator:
     """성장률 계산 클래스"""
     
-    def calculate_growth_rates(self, years_data: Dict[str, Dict[str, Dict[str, float]]], target_years: List[str], extracted_values: Dict[str, Dict[str, float]] = None) -> Dict[str, List[Optional[float]]]:
+    def calculate_growth_rates(self, years_data: Dict[str, Dict[str, Dict[str, float]]], target_years: List[str], extracted_values: Dict[str, Dict[str, float]] = None) -> Dict[str, List[float]]:
         """매출액과 당기순이익의 성장률을 계산합니다.
         
         Args:
@@ -19,9 +19,9 @@ class GrowthRateCalculator:
             "net_income_growth": []
         }
         
-        # 첫 해는 성장률 계산 불가능하므로 None 추가
-        growth_rates["revenue_growth"].append(None)
-        growth_rates["net_income_growth"].append(None)
+        # 첫 해는 성장률 계산 불가능하므로 0.0 추가 (None 대신)
+        growth_rates["revenue_growth"].append(0.0)
+        growth_rates["net_income_growth"].append(0.0)
         
         # 두 번째 해부터 성장률 계산
         for i in range(1, len(target_years)):
@@ -45,11 +45,12 @@ class GrowthRateCalculator:
         
         return growth_rates
 
-    def _calculate_growth_rate(self, current: float, previous: float) -> Optional[float]:
-        """성장률을 계산합니다."""
+    def _calculate_growth_rate(self, current: float, previous: float) -> float:
+        """성장률을 계산합니다. 계산할 수 없는 경우 0.0을 반환합니다."""
         try:
             if previous == 0:
-                return None
+                return 0.0
             return ((current - previous) / abs(previous)) * 100
-        except:
-            return None 
+        except Exception as e:
+            logger.warning(f"성장률 계산 중 오류 발생: {str(e)}")
+            return 0.0 

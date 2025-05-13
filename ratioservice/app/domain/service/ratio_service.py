@@ -31,6 +31,17 @@ class RatioService:
                 logger.error(f"재무제표 데이터가 없습니다: {company_name}")
                 raise ValueError(f"재무제표 데이터가 없습니다: {company_name}")
             
+            # 회사 코드 확인
+            corp_code = None
+            for item in financial_data:
+                if "corp_code" in item and item["corp_code"]:
+                    corp_code = item["corp_code"]
+                    break
+                    
+            if not corp_code:
+                logger.error(f"회사 코드를 찾을 수 없습니다: {company_name}")
+                raise ValueError(f"회사 코드를 찾을 수 없습니다: {company_name}")
+            
             # 2. 데이터 전처리 (연도별, 계정명별로 정리)
             years_data = self.data_processor.preprocess_financial_data(financial_data)
 
@@ -50,7 +61,7 @@ class RatioService:
             growth_rates = self.growth_calculator.calculate_growth_rates(years_data, target_years)
 
             # 7. 재무비율 저장
-            await self._save_calculated_ratios(financial_data[0]["corp_code"], company_name, target_years, ratios, growth_rates)
+            await self._save_calculated_ratios(corp_code, company_name, target_years, ratios, growth_rates)
 
             # 8. 응답 생성
             return self.response_builder.build_metrics_response(

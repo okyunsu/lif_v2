@@ -7,6 +7,7 @@ from app.domain.model.schema.schema import (
     )
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.foundation.infra.scheduler.financial_scheduler import financial_scheduler
 
 # 로거 설정
 logger = logging.getLogger("fin_router")
@@ -46,6 +47,18 @@ async def get_financial_by_name(
     logger.info(f"🕞🕞🕞🕞🕞🕞get_financial_by_name 호출 - 회사명: {payload.company_name}")
     controller = FinController(db)
     return await controller.get_financial(company_name=payload.company_name)
+
+# 크롤링 수동 실행 엔드포인트
+@router.post("/financial/crawl-now", summary="재무제표 크롤링 즉시 실행")
+async def run_crawling_now():
+    """
+    재무제표 데이터 크롤링을 즉시 실행합니다.
+    - 모든 회사의 재무제표 데이터를 크롤링합니다.
+    - 백그라운드에서 실행되며, 실행 시작 여부를 반환합니다.
+    """
+    logger.info("🚀 재무제표 크롤링 수동 실행 요청")
+    result = await financial_scheduler.run_crawl_now()
+    return result
 
 # PUT
 @router.put("/financial", summary="회사 정보 전체 수정")

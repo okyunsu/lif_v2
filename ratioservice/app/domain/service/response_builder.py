@@ -5,21 +5,21 @@ import math
 
 logger = logging.getLogger(__name__)
 
-def to_float_list(lst, n):
-    # None, NaN은 그대로 유지, 잘못된 값만 None으로 변환, 길이 안 맞으면 None 리스트
+def to_float_list(lst, n, default_value=None):
+    # None, NaN은 default_value로 변환, 잘못된 값도 default_value로 변환, 길이 안 맞으면 default_value 리스트
     if not isinstance(lst, list) or len(lst) != n:
-        return [None] * n
+        return [default_value] * n
     result = []
     for x in lst:
         try:
             if x is None:
-                result.append(None)
+                result.append(default_value)
             elif isinstance(x, float) and math.isnan(x):
-                result.append(None)
+                result.append(default_value)
             else:
                 result.append(float(x))
         except Exception:
-            result.append(None)
+            result.append(default_value)
     return result
 
 class ResponseBuilder:
@@ -34,8 +34,8 @@ class ResponseBuilder:
     ) -> FinancialMetricsResponse:
         """재무비율 응답을 생성합니다."""
         n = len(target_years)
-        revenue_growth = to_float_list(growth_rates.get("revenue_growth"), n)
-        net_income_growth = to_float_list(growth_rates.get("net_income_growth"), n)
+        revenue_growth = to_float_list(growth_rates.get("revenue_growth"), n, default_value=0.0)
+        net_income_growth = to_float_list(growth_rates.get("net_income_growth"), n, default_value=0.0)
         debt_ratios = to_float_list(ratios.get("debt_ratios"), n)
         current_ratios = to_float_list(ratios.get("current_ratios"), n)
         operating_margins = to_float_list(ratios.get("operating_margins"), n)

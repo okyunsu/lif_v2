@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import sys
+import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from app.api.fin_router import router as fin_api_router
@@ -25,6 +26,15 @@ async def lifespan(app: FastAPI):
     # 스케줄러 시작
     financial_scheduler.start()
     logger.info("재무제표 데이터 자동 크롤링 스케줄러가 시작되었습니다.")
+    
+    # 시작 시 크롤링 실행 여부 확인
+    run_crawl_on_startup = os.getenv("RUN_CRAWL_ON_STARTUP", "false").lower() == "true"
+    if run_crawl_on_startup:
+        logger.info("서비스 시작 시 재무제표 크롤링을 실행합니다.")
+        # 비동기 태스크로 크롤링 실행
+        import asyncio
+        asyncio.create_task(financial_scheduler.run_crawl_now())
+    
     yield
     logger.info("🛑 Finance API 서비스 종료")
     # 스케줄러 종료
@@ -37,6 +47,7 @@ app = FastAPI(
     title="Finance API",
     description="Finance API Service",
     version="0.1.0",
+    lifespan=lifespan
 )
 
 # ✅ CORS 설정
