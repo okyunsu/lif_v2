@@ -81,13 +81,14 @@ class DartApiService:
 
     async def check_new_report_available(self, corp_code: str, year: int) -> bool:
         """새로운 보고서가 있는지 확인합니다."""
-        # 월 확인 코드 제거 - 항상 새 보고서 확인
-
+        # 현재 연도가 아닌 이전 연도의 보고서를 확인
+        target_year = year - 1
+        
         params = {
             "crtfc_key": self.api_key,
             "corp_code": corp_code,
-            "bgn_de": f"{year}0101",
-            "end_de": f"{year}1231",
+            "bgn_de": f"{target_year}0101",
+            "end_de": f"{target_year}1231",
             "pblntf_ty": "A001"  # 사업보고서
         }
 

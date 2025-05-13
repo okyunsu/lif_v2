@@ -132,16 +132,18 @@ class FinancialStatementService:
         
         Args:
             company: 회사 정보
-            year: 크롤링할 연도
+            year: 현재 연도 (이전 연도의 데이터를 크롤링)
             results: 결과를 저장할 리스트
             
         Returns:
             bool: 크롤링 성공 여부
         """
-        result = await self.fetch_and_save_financial_data(company.corp_name, year)
+        # 현재 연도가 아닌 이전 연도의 데이터를 크롤링
+        target_year = year - 1
+        result = await self.fetch_and_save_financial_data(company.corp_name, target_year)
         results.append({
             "company": company.corp_name,
-            "year": year,
+            "year": target_year,
             "status": result["status"],
             "message": result["message"]
         })
@@ -162,8 +164,8 @@ class FinancialStatementService:
         """
         company_success = False
         
-        # 최근 3개년 데이터 크롤링
-        for year in range(current_year-2, current_year+1):
+        # 최근 3개년 데이터 크롤링 (현재 연도 제외, 이전 3년)
+        for year in range(current_year-3, current_year):
             result = await self.fetch_and_save_financial_data(company.corp_name, year)
             results.append({
                 "company": company.corp_name,
