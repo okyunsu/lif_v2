@@ -62,7 +62,7 @@ class CompanyInfoService:
             }
         return None
     
-    async def _create_company_schema_from_db(self, db_company: Dict[str, Any]) -> CompanySchema:
+    def _create_company_schema_from_db(self, db_company: Dict[str, Any]) -> CompanySchema:
         """DB 데이터로부터 CompanySchema 객체를 생성합니다."""
         now = datetime.now().isoformat()
         return CompanySchema(
