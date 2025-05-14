@@ -4,7 +4,7 @@ import logging
 
 from app.domain.model.schema.schema import FinancialMetricsResponse
 from app.domain.repository.ratio_repository import get_financial_data, save_financial_ratios, get_saved_financial_ratios
-from .financial_data_processor import FinancialDataProcessor
+from .ratio_data_processor import RatioDataProcessor
 from .ratio_calculator import RatioCalculator
 from .growth_rate_calculator import GrowthRateCalculator
 from .response_builder import ResponseBuilder
@@ -16,9 +16,9 @@ class RatioService:
     
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
-        self.data_processor = FinancialDataProcessor()
-        self.ratio_calculator = RatioCalculator()
-        self.growth_calculator = GrowthRateCalculator()
+        self.data_processor = RatioDataProcessor()
+        self.ratio_calculator = RatioCalculator(self.data_processor)
+        self.growth_calculator = GrowthRateCalculator(self.data_processor)
         self.response_builder = ResponseBuilder()
 
     async def calculate_financial_ratios(self, company_name: str, year: Optional[int] = None) -> FinancialMetricsResponse:
@@ -32,21 +32,17 @@ class RatioService:
                 raise ValueError(f"재무제표 데이터가 없습니다: {company_name}")
             
             # 회사 코드 확인
-            corp_code = None
-            for item in financial_data:
-                if "corp_code" in item and item["corp_code"]:
-                    corp_code = item["corp_code"]
-                    break
-                    
-            if not corp_code:
-                logger.error(f"회사 코드를 찾을 수 없습니다: {company_name}")
-                raise ValueError(f"회사 코드를 찾을 수 없습니다: {company_name}")
+            corp_code = self._extract_corp_code(financial_data)
             
             # 2. 데이터 전처리 (연도별, 계정명별로 정리)
             years_data = self.data_processor.preprocess_financial_data(financial_data)
 
             # 3. 대상 연도 결정
             target_years = self.data_processor.get_target_years(years_data)
+            
+            if not target_years:
+                logger.error(f"분석 가능한 연도가 없습니다: {company_name}")
+                raise ValueError(f"분석 가능한 연도가 없습니다: {company_name}")
             
             # 4. 저장된 재무비율 확인 - 이미 계산된 데이터가 있으면 바로 반환
             saved_ratios = await get_saved_financial_ratios(self.db_session, company_name, target_years)
@@ -70,9 +66,21 @@ class RatioService:
                 ratios=ratios,
                 growth_rates=growth_rates
             )
+        except ValueError as e:
+            logger.error(f"재무비율 계산 값 오류: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"재무비율 계산 중 오류 발생: {str(e)}")
             raise
+    
+    def _extract_corp_code(self, financial_data: List[Dict[str, Any]]) -> str:
+        """재무 데이터에서 회사 코드를 추출합니다."""
+        for item in financial_data:
+            if "corp_code" in item and item["corp_code"]:
+                return item["corp_code"]
+        
+        logger.error("회사 코드를 찾을 수 없습니다")
+        raise ValueError("회사 코드를 찾을 수 없습니다")
     
     def _build_response_from_saved_ratios(self, company_name: str, target_years: List[str], 
                                          saved_ratios: List[Dict[str, Any]]) -> FinancialMetricsResponse:

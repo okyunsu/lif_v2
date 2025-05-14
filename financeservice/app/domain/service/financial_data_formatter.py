@@ -8,6 +8,11 @@ class FinancialDataFormatter:
     재무제표 데이터 포맷팅 클래스
     
     재무제표 원시 데이터를 클라이언트에게 보여주기 좋은 형태로 변환합니다.
+    
+    책임:
+    - 재무제표 데이터를 연도별로 그룹화
+    - 재무제표 유형별로 분류 (재무상태표, 손익계산서, 현금흐름표)
+    - 클라이언트 응답에 적합한 형태로 포맷팅
     """
     
     # 재무제표 유형별 매핑
@@ -24,7 +29,7 @@ class FinancialDataFormatter:
         "bfefrmtrm_amount": "전전기"
     }
     
-    async def format_financial_data(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def format_financial_data(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         재무제표 데이터를 연도별로 포맷팅합니다.
         
@@ -32,11 +37,20 @@ class FinancialDataFormatter:
             data: 원시 재무제표 데이터 리스트
             
         Returns:
-            List[Dict]: 포맷팅된 재무제표 데이터 리스트 (연도별)
+            Dict: 포맷팅된 재무제표 데이터
+            {
+                "status": "success" | "error",
+                "message": str,
+                "data": List[Dict] - 연도별 포맷팅된 재무제표 데이터
+            }
         """
         if not data:
             logger.warning("포맷팅할 재무제표 데이터가 없습니다.")
-            return []
+            return {
+                "status": "success",
+                "message": "포맷팅할 재무제표 데이터가 없습니다.",
+                "data": []
+            }
             
         try:
             # 연도별로 데이터 정리
@@ -44,10 +58,20 @@ class FinancialDataFormatter:
             
             # 정렬된 연도 리스트 생성 (최신 연도부터)
             sorted_years = sorted(years_data.keys(), reverse=True)
-            return [years_data[year] for year in sorted_years]
+            formatted_data = [years_data[year] for year in sorted_years]
+            
+            return {
+                "status": "success",
+                "message": "재무제표 데이터 포맷팅이 완료되었습니다.",
+                "data": formatted_data
+            }
         except Exception as e:
             logger.error(f"재무제표 데이터 포맷팅 중 오류 발생: {str(e)}")
-            return []
+            return {
+                "status": "error",
+                "message": f"재무제표 데이터 포맷팅 중 오류 발생: {str(e)}",
+                "data": []
+            }
     
     async def _group_data_by_year(self, data: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """

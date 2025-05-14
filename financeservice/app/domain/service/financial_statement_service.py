@@ -23,15 +23,40 @@ class FinancialStatementService:
     재무제표 데이터 서비스
     
     재무제표 데이터의 크롤링, 저장, 조회, 포맷팅을 담당합니다.
+    
+    의존성:
+    - CompanyInfoService: 회사 정보 조회
+    - DartApiService: DART API 통신
+    - FinancialDataProcessor: 데이터 가공
+    - FinancialDataFormatter: 데이터 포맷팅
     """
     
-    def __init__(self, db_session: AsyncSession):
-        """서비스 초기화"""
+    def __init__(
+        self, 
+        db_session: AsyncSession,
+        company_service: Optional[CompanyInfoService] = None,
+        dart_api_service: Optional[DartApiService] = None,
+        data_processor: Optional[FinancialDataProcessor] = None,
+        data_formatter: Optional[FinancialDataFormatter] = None
+    ):
+        """
+        서비스 초기화
+        
+        Args:
+            db_session: 데이터베이스 세션
+            company_service: 회사 정보 서비스 (없으면 새로 생성)
+            dart_api_service: DART API 서비스 (없으면 새로 생성)
+            data_processor: 데이터 처리기 (없으면 새로 생성)
+            data_formatter: 데이터 포맷터 (없으면 새로 생성)
+        """
         self.db_session = db_session
-        self.dart_api = DartApiService()
-        self.data_processor = FinancialDataProcessor()
-        self.company_service = CompanyInfoService(db_session)
-        self.data_formatter = FinancialDataFormatter()
+        
+        # 의존성 주입 또는 생성
+        self.dart_api = dart_api_service or DartApiService()
+        self.data_processor = data_processor or FinancialDataProcessor()
+        self.company_service = company_service or CompanyInfoService(db_session, self.dart_api)
+        self.data_formatter = data_formatter or FinancialDataFormatter()
+        
         logger.info("FinancialStatementService가 초기화되었습니다.")
 
     async def auto_crawl_financial_data(self) -> Dict[str, Any]:
@@ -40,6 +65,12 @@ class FinancialStatementService:
         
         Returns:
             Dict: 크롤링 결과 요약
+            {
+                "status": "success" | "error",
+                "message": str,
+                "data": List[Dict] - 회사별 크롤링 결과,
+                "summary": Dict - 크롤링 결과 요약
+            }
         """
         try:
             # 1. KOSPI 100 기업 목록 조회
@@ -63,7 +94,9 @@ class FinancialStatementService:
             logger.error(f"자동 크롤링 중 오류 발생: {str(e)}")
             return {
                 "status": "error",
-                "message": f"자동 크롤링 실패: {str(e)}"
+                "message": f"자동 크롤링 실패: {str(e)}",
+                "data": [],
+                "summary": {}
             }
 
     async def _crawl_companies_data(self, companies: List[CompanySchema]) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
@@ -221,6 +254,11 @@ class FinancialStatementService:
             
         Returns:
             Dict: 조회 및 저장 결과
+            {
+                "status": "success" | "error",
+                "message": str,
+                "data": List[Dict] - 저장된 재무제표 데이터
+            }
         """
         try:
             # 1. 회사 정보 조회
@@ -241,7 +279,8 @@ class FinancialStatementService:
             if not statements:
                 return {
                     "status": "error",
-                    "message": f"{company_name}의 재무제표 데이터를 찾을 수 없습니다."
+                    "message": f"{company_name}의 재무제표 데이터를 찾을 수 없습니다.",
+                    "data": []
                 }
             
             # 4. 데이터 처리 및 저장
@@ -261,7 +300,8 @@ class FinancialStatementService:
             logger.error(f"{company_name}의 재무제표 데이터 저장 실패: {str(e)}")
             return {
                 "status": "error",
-                "message": str(e)
+                "message": str(e),
+                "data": []
             }
     
     async def _fetch_financial_statements(self, company_info: CompanySchema, year: Optional[int]) -> List[Dict[str, Any]]:
@@ -294,16 +334,10 @@ class FinancialStatementService:
         Returns:
             List[Dict]: 처리된 재무제표 데이터
         """
-        # 1. 중복 제거
-        unique_statements = await self.data_processor.deduplicate_statements(statements)
+        # 1. 데이터 처리
+        processed_statements = await self.data_processor.process_raw_statements(statements, company_info)
         
-        # 2. 데이터 처리
-        processed_statements = await asyncio.gather(*[
-            self.data_processor.prepare_statement_data(stmt, company_info)
-            for stmt in unique_statements
-        ])
-        
-        # 3. 저장
+        # 2. 저장
         await save_financial_statements(self.db_session, processed_statements)
         
         return processed_statements
@@ -318,6 +352,11 @@ class FinancialStatementService:
             
         Returns:
             Dict: 포맷팅된 재무제표 데이터
+            {
+                "status": "success" | "error",
+                "message": str,
+                "data": List[Dict] - 포맷팅된 재무제표 데이터
+            }
         """
         try:
             # 1. 데이터 조회 및 저장
@@ -327,22 +366,18 @@ class FinancialStatementService:
             if data["status"] == "error" or not data.get("data"):
                 logger.warning(f"{company_name}의 재무제표 데이터를 찾을 수 없습니다.")
                 return {
-                    "status": "success",
+                    "status": "error",
                     "message": "재무제표가 존재하지 않습니다.",
                     "data": []
                 }
             
             # 3. 재무제표 데이터 포맷팅
-            financial_data = await self.data_formatter.format_financial_data(data["data"])
+            return await self.data_formatter.format_financial_data(data["data"])
             
-            return {
-                "status": "success",
-                "message": "재무제표가 성공적으로 조회되었습니다.",
-                "data": financial_data
-            }
         except Exception as e:
             logger.error(f"재무제표 데이터 포맷팅 실패: {str(e)}")
             return {
                 "status": "error",
-                "message": f"재무제표 데이터 조회 실패: {str(e)}"
+                "message": f"재무제표 데이터 조회 실패: {str(e)}",
+                "data": []
             }

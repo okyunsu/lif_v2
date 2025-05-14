@@ -12,6 +12,11 @@ class FinancialDataProcessor:
     
     DART API에서 가져온 원시 재무제표 데이터를 가공하여
     DB 저장 및 클라이언트 응답에 적합한 형태로 변환합니다.
+    
+    책임:
+    - 데이터 중복 제거
+    - 금액 변환 (문자열 -> 숫자)
+    - DB 저장 형식으로 변환
     """
     
     async def process_raw_statements(self, statements: List[Dict[str, Any]], 
@@ -68,6 +73,10 @@ class FinancialDataProcessor:
         """
         중복되는 계정과목을 제거하고 가장 최신의 금액만 남깁니다.
         
+        중복 제거 기준:
+        - 계정과목명(account_nm)과 재무제표 유형(sj_nm)이 동일한 항목 중
+        - 우선순위(ord)가 가장 높은(값이 낮은) 항목만 유지
+        
         Args:
             statements: 원시 재무제표 데이터 리스트
             
@@ -100,6 +109,9 @@ class FinancialDataProcessor:
             
         Returns:
             Dict: DB 저장 형식으로 변환된 재무제표 항목
+            
+        Raises:
+            Exception: 데이터 변환 중 오류 발생 시
         """
         try:
             # 금액 변환을 비동기로 처리

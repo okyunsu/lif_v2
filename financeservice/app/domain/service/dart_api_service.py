@@ -5,9 +5,9 @@ import zipfile
 import xml.etree.ElementTree as ET
 from io import BytesIO
 from typing import List, Optional, Dict, Any, Tuple
-from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
+from app.foundation.core.config.settings import settings
 from app.domain.model.schema.schema import DartApiResponse
 from app.domain.model.schema.company_schema import CompanySchema
 from app.domain.model.schema.report_schema import ReportSchema
@@ -47,23 +47,17 @@ KOSPI_100_COMPANIES = [
     "NH투자증권", "한국타이어앤테크놀로지", "CJ대한통운", "만도", "한솔케미칼"
 ]
 
-
-
 class DartApiService:
-    """DART API 통신 서비스"""
+    """
+    DART API 통신 서비스
     
-    # API 엔드포인트 상수
-    CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml"
-    FINANCIAL_STATEMENT_URL = "https://opendart.fss.or.kr/api/fnlttSinglAcnt.json"
-    REPORT_LIST_URL = "https://opendart.fss.or.kr/api/list.json"
+    DART API를 통해 회사 정보, 재무제표, 보고서 등의 데이터를 조회합니다.
+    """
     
     def __init__(self):
         """DART API 서비스 초기화"""
-        load_dotenv()
-        self.api_key = os.getenv("DART_API_KEY")
-        if not self.api_key:
-            logger.error("DART API 키가 필요합니다.")
-            raise ValueError("DART API 키가 필요합니다.")
+        self.api_key = settings.DART_API_KEY
+        self.endpoints = settings.DART_ENDPOINTS
         logger.info("DartApiService가 초기화되었습니다.")
 
     async def fetch_top_companies(self, limit: int = 100) -> List[CompanySchema]:
@@ -71,7 +65,7 @@ class DartApiService:
         logger.info("KOSPI 100 회사 조회 시작")
         
         try:
-            content = await self._make_api_request(self.CORP_CODE_URL, {"crtfc_key": self.api_key})
+            content = await self._make_api_request(self.endpoints["CORP_CODE"], {"crtfc_key": self.api_key})
             companies = await self._parse_company_xml(content, limit)
             logger.info(f"KOSPI 100 회사 조회 완료: 총 {len(companies)}개 회사")
             return companies
@@ -93,7 +87,7 @@ class DartApiService:
         }
 
         try:
-            data = await self._make_json_api_request(self.REPORT_LIST_URL, params)
+            data = await self._make_json_api_request(self.endpoints["REPORT_LIST"], params)
             if data.get("status") != "000":
                 return False
 
@@ -113,7 +107,7 @@ class DartApiService:
         logger.info(f"회사 정보 조회 시작: {company_name}")
         
         try:
-            content = await self._make_api_request(self.CORP_CODE_URL, {"crtfc_key": self.api_key})
+            content = await self._make_api_request(self.endpoints["CORP_CODE"], {"crtfc_key": self.api_key})
             company = await self._find_company_by_name(content, company_name)
             logger.info(f"회사 정보를 찾았습니다: {company_name}")
             return company
@@ -157,7 +151,7 @@ class DartApiService:
                 
                 try:
                     # API 요청
-                    data = await self._make_json_api_request(self.FINANCIAL_STATEMENT_URL, params)
+                    data = await self._make_json_api_request(self.endpoints["FINANCIAL_STATEMENT"], params)
                     api_response = DartApiResponse(**data)
                     
                     if api_response.status != "000":
@@ -183,15 +177,6 @@ class DartApiService:
             logger.warning(f"[{corp_code}] 모든 연도에서 사업보고서 재무제표를 찾지 못했습니다.")
         
         return statements
-
-    async def _prepare_financial_statement_params(self, corp_code: str, year: int, reprt_code: str) -> Dict[str, str]:
-        """재무제표 API 요청 파라미터를 준비합니다."""
-        return {
-            "crtfc_key": self.api_key,
-            "corp_code": corp_code,
-            "bsns_year": str(year),
-            "reprt_code": reprt_code
-        }
 
     # ===== 내부 헬퍼 메서드 =====
     
