@@ -10,5 +10,5 @@ shortuuid==1.0.13
 python-jose[cryptography]
 redis==5.2.1
 httpx
-python-multipart
 aiohttp 
+python-multipart==0.0.9

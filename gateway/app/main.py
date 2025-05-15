@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os
@@ -73,6 +73,38 @@ async def proxy_get(
 
 # POST
 
+
+@gateway_router.post("/{service}/upload/{path:path}", summary="파일 업로드 프록시")
+async def proxy_file_upload(
+    request: Request,
+    service: ServiceType,
+    path: str,
+    file: UploadFile = File(...)
+):
+    import httpx
+    from app.domain.model.service_proxy_factory import ServiceProxyFactory
+
+    factory = ServiceProxyFactory(service_type=service)
+    file_bytes = await file.read()
+
+    multipart = {
+        "file": (file.filename, file_bytes, file.content_type)
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            # ✅ upload 경로 붙이기
+            url = f"{factory.base_url}/esg/upload/{path}"
+            print(f"📦 Forwarding file to: {url}")
+            response = await client.post(url=url, files=multipart)
+            return JSONResponse(content=response.json(), status_code=response.status_code)
+        except httpx.HTTPError as e:
+            return JSONResponse(content={"detail": str(e)}, status_code=500)
+        except Exception as e:
+            return JSONResponse(content={"detail": "파일 업로드 중 오류", "error": str(e)}, status_code=500)
+
+
+
 @gateway_router.post("/{service}/{path:path}", summary="POST 프록시")
 async def proxy_post(
     service: ServiceType, 
@@ -108,6 +140,9 @@ async def proxy_post(
             content={"detail": f"Service error: {response.text}"},
             status_code=response.status_code
         )
+    
+
+
 
 # PUT
 @gateway_router.put("/{service}/{path:path}", summary="PUT 프록시")
@@ -144,6 +179,8 @@ async def proxy_patch(service: ServiceType, path: str, request: Request):
         body=await request.body()
     )
     return JSONResponse(content=response.json(), status_code=response.status_code)
+
+
 
 # ✅ 라우터 등록
 app.include_router(gateway_router)

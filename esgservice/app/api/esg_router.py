@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Request
 import logging
+from fastapi import UploadFile, File
+from app.domain.controller.esg_controller import UploadController
 
 # 로거 설정
 logger = logging.getLogger("esg_router")
 logger.setLevel(logging.INFO)
 router = APIRouter()
 
-
+upload_controller = UploadController()
 
 # GET
 @router.get("/esgservice", summary="모든 회사 ESG 정보 조회")
@@ -131,3 +133,8 @@ async def patch_esg(request: Request):
             "environmental": "A+"
         }
     }
+
+
+@router.post("/upload/pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    return await upload_controller.upload_pdf(file)

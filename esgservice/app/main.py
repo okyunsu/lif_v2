@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 import logging
 from app.api.esg_router import router as esg_api_router
+from app.api.routes.upload_router import router as upload_router
 
 # 로깅 설정
 logging.basicConfig(
@@ -50,4 +51,11 @@ app.include_router(esg_api_router, prefix="/esg", tags=["ESG API"])
 
 # ✅ 서브 라우터 등록
 app.include_router(esg_router, tags=["ESG API"])
+
+# 라우터 등록
+app.include_router(upload_router)
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to ESG Service"}
 

@@ -9,3 +9,5 @@ passlib[bcrypt]==1.7.4
 shortuuid==1.0.13
 python-jose[cryptography]
 redis==5.2.1 
+aiofiles==0.8.0
+python-multipart==0.0.9
