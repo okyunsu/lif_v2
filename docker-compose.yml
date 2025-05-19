@@ -108,6 +108,25 @@ services:
     networks:
       - lif-network
 
+  news-service:
+    build: ./news-service
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./news-service/app:/app/app
+      - ./news-service/requirements.txt:/app/requirements.txt
+    env_file:
+      - ./news-service/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/lifdb
+    restart: always
+    depends_on:
+      - postgres
+    networks:
+      - lif-network
+
+
 networks:
   lif-network:
     driver: bridge

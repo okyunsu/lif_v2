@@ -22,6 +22,8 @@ class ServiceProxyFactory:
             path = "esg/esgservice"
         elif path == "ratio":
             path = "ratio/ratio"
+        elif path == "search":
+            path = "news/search"
         url = f"{self.base_url}/{path}"
         print(f"🔍 Requesting URL: {url}")
         # 헤더 설정
