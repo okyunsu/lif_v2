@@ -1,10 +1,9 @@
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from app.domain.service.financial_statement_service import FinancialStatementService
+from app.domain.service.auto_crawl_service import AutoCrawlService
 from app.foundation.infra.database.database import async_session
-from zoneinfo    import ZoneInfo
-
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +47,8 @@ class FinancialDataScheduler:
             # DB 세션 직접 생성
             session = async_session()
             try:
-                service = FinancialStatementService(session)
-                result = await service.auto_crawl_financial_data()
+                service = AutoCrawlService(session)
+                result = await service.execute_crawl()
                 
                 if result["status"] == "success":
                     logger.info(f"재무제표 데이터 자동 크롤링 완료: {len(result.get('data', []))}개 회사 처리")

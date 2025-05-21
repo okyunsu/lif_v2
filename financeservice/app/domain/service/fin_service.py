@@ -151,3 +151,5 @@ class FinService:
                 "message": f"재무제표 크롤링 실패: {str(e)}",
                 "data": []
             }
+
+ 

@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query, Body
 import logging
 from app.domain.controller.fin_controller import FinController
 from app.foundation.infra.database.database import get_db_session
 from app.domain.model.schema.schema import (
     CompanyNameRequest,
-    )
+        
+)
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.foundation.infra.scheduler.financial_scheduler import financial_scheduler
+from typing import Optional, List
 
 # 로거 설정
 logger = logging.getLogger("fin_router")

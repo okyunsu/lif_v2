@@ -36,17 +36,19 @@ class FinController:
                 actual_year = year
             
             # 재무제표 데이터 크롤링 및 저장
-            success = await self.service.crawl_and_save_financial_data(company_name, actual_year)
+            result = await self.service.crawl_financial_data(company_name, actual_year)
             
-            if success:
+            if result["status"] == "success":
                 return {
                     "status": "success",
-                    "message": f"{company_name}의 재무제표 데이터가 성공적으로 저장되었습니다."
+                    "message": f"{company_name}의 재무제표 데이터가 성공적으로 저장되었습니다.",
+                    "data": result.get("data", [])
                 }
             else:
                 return {
                     "status": "error",
-                    "message": f"{company_name}의 재무제표 데이터 저장에 실패했습니다."
+                    "message": f"{company_name}의 재무제표 데이터 저장에 실패했습니다: {result.get('message')}",
+                    "data": []
                 }
             
         except ValueError as e:
