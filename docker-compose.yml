@@ -126,6 +126,21 @@ services:
     networks:
       - lif-network
 
+  pdfservice:
+    build: 
+      context: ./pdfservice
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/lifdb
+      - ENVIRONMENT=development
+    depends_on:
+      - postgres
+    volumes:
+      - ./pdfservice:/app
+    networks:
+      - lif-network
 
 networks:
   lif-network:

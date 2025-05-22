@@ -1,11 +1,28 @@
-from sqlalchemy import TIMESTAMP, Column, String, func
-from app.foundation.infra.database.base import Base
+from datetime import datetime
+from typing import Dict, Any, Optional
+from app.foundation.infra.database.base import BaseModel
 
-class ReportEntity(Base):
-    __tablename__ = "reports"
-
-    rcept_no = Column(String(20), primary_key=True, doc="접수번호 (공시 문서의 고유 식별자)")
-    reprt_code = Column(String(20), nullable=False, doc="보고서 코드")
+class Report(BaseModel):
+    """보고서 정보 엔티티"""
     
-    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now(), doc="생성 날짜")
-    updated_at = Column(TIMESTAMP, nullable=False, doc="수정 날짜") 
+    def __init__(
+        self,
+        rcept_no: str,
+        reprt_code: str,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None
+    ):
+        self.rcept_no = rcept_no
+        self.reprt_code = reprt_code
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Report':
+        """딕셔너리로부터 Report 객체를 생성합니다."""
+        return cls(
+            rcept_no=data["rcept_no"],
+            reprt_code=data["reprt_code"],
+            created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None,
+            updated_at=datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None
+        ) 

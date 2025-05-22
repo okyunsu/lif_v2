@@ -1,29 +1,61 @@
-from sqlalchemy import TIMESTAMP, Column, Integer, String, Numeric, ForeignKey, func
-from sqlalchemy.orm import relationship
-from app.foundation.infra.database.base import Base
+from datetime import datetime
+from typing import Dict, Any, Optional
+from app.foundation.infra.database.base import BaseModel
 
-class FinancialEntity(Base):
-    __tablename__ = "financials"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, doc="자동 증가하는 고유 식별자")
-    corp_code = Column(String(20), ForeignKey("companies.corp_code"), nullable=False, doc="기업 코드")
-    bsns_year = Column(String(4), nullable=False, doc="사업연도")
-    sj_div = Column(String(10), ForeignKey("statement.sj_div"), nullable=False, doc="재무제표 구분")
-    account_nm = Column(String(100), nullable=False, doc="계정명 (예: 자산총계, 매출액 등)")
-    thstrm_nm = Column(String(20), nullable=True, doc="당기명")
-    thstrm_amount = Column(Numeric, nullable=True, doc="당기금액")
-    frmtrm_nm = Column(String(20), nullable=True, doc="전기명")
-    frmtrm_amount = Column(Numeric, nullable=True, doc="전기금액")
-    bfefrmtrm_nm = Column(String(20), nullable=True, doc="전전기명")
-    bfefrmtrm_amount = Column(Numeric, nullable=True, doc="전전기금액")
-    ord = Column(Integer, nullable=True, doc="정렬 순서")
-    currency = Column(String(10), nullable=True, doc="통화 단위")
-    rcept_no = Column(String(20), ForeignKey("reports.rcept_no"), nullable=True, doc="접수번호")
+class Financial(BaseModel):
+    """재무제표 데이터 엔티티"""
     
-    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now(), doc="생성 날짜")
-    updated_at = Column(TIMESTAMP, nullable=False, doc="수정 날짜")
-
-    # Relationships
-    company = relationship("CompanyEntity")
-    statement = relationship("StatementEntity")
-    report = relationship("ReportEntity") 
+    def __init__(
+        self,
+        corp_code: str,
+        bsns_year: str,
+        sj_div: str,
+        account_nm: str,
+        thstrm_nm: Optional[str] = None,
+        thstrm_amount: Optional[float] = None,
+        frmtrm_nm: Optional[str] = None,
+        frmtrm_amount: Optional[float] = None,
+        bfefrmtrm_nm: Optional[str] = None,
+        bfefrmtrm_amount: Optional[float] = None,
+        ord: Optional[int] = None,
+        currency: Optional[str] = None,
+        rcept_no: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None
+    ):
+        self.corp_code = corp_code
+        self.bsns_year = bsns_year
+        self.sj_div = sj_div
+        self.account_nm = account_nm
+        self.thstrm_nm = thstrm_nm
+        self.thstrm_amount = thstrm_amount
+        self.frmtrm_nm = frmtrm_nm
+        self.frmtrm_amount = frmtrm_amount
+        self.bfefrmtrm_nm = bfefrmtrm_nm
+        self.bfefrmtrm_amount = bfefrmtrm_amount
+        self.ord = ord
+        self.currency = currency
+        self.rcept_no = rcept_no
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Financial':
+        """딕셔너리로부터 Financial 객체를 생성합니다."""
+        return cls(
+            corp_code=data["corp_code"],
+            bsns_year=data["bsns_year"],
+            sj_div=data["sj_div"],
+            account_nm=data["account_nm"],
+            thstrm_nm=data.get("thstrm_nm"),
+            thstrm_amount=data.get("thstrm_amount"),
+            frmtrm_nm=data.get("frmtrm_nm"),
+            frmtrm_amount=data.get("frmtrm_amount"),
+            bfefrmtrm_nm=data.get("bfefrmtrm_nm"),
+            bfefrmtrm_amount=data.get("bfefrmtrm_amount"),
+            ord=data.get("ord"),
+            currency=data.get("currency"),
+            rcept_no=data.get("rcept_no"),
+            created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else None,
+            updated_at=datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None
+        ) 

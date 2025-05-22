@@ -2,7 +2,6 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.domain.service.auto_crawl_service import AutoCrawlService
-from app.foundation.infra.database.database import async_session
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
@@ -12,6 +11,7 @@ class FinancialDataScheduler:
     
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
+        self.crawl_service = AutoCrawlService()
         logger.info("재무제표 데이터 스케줄러가 초기화되었습니다.")
     
     def start(self):
@@ -39,31 +39,24 @@ class FinancialDataScheduler:
         logger.info("재무제표 데이터 크롤링 수동 실행 시작")
         await self.crawl_financial_data()
         return {"status": "success", "message": "재무제표 데이터 크롤링이 시작되었습니다."}
-    
-    async def crawl_financial_data(self):
-        """재무제표 데이터를 자동으로 크롤링합니다."""
-        logger.info("재무제표 데이터 자동 크롤링 시작")
-        try:
-            # DB 세션 직접 생성
-            session = async_session()
-            try:
-                service = AutoCrawlService(session)
-                result = await service.execute_crawl()
-                
-                if result["status"] == "success":
-                    logger.info(f"재무제표 데이터 자동 크롤링 완료: {len(result.get('data', []))}개 회사 처리")
-                else:
-                    logger.error(f"재무제표 데이터 자동 크롤링 실패: {result.get('message')}")
-                
-                await session.commit()
-            except Exception as e:
-                await session.rollback()
-                raise e
-            finally:
-                await session.close()
         
+    async def crawl_financial_data(self):
+        """재무제표 데이터 크롤링을 실행합니다."""
+        try:
+            result = await self.crawl_service.execute_crawl()
+            if result["status"] == "success":
+                logger.info("재무제표 데이터 크롤링이 성공적으로 완료되었습니다.")
+            else:
+                logger.error(f"재무제표 데이터 크롤링 실패: {result.get('message')}")
+            return result
         except Exception as e:
-            logger.exception(f"재무제표 데이터 자동 크롤링 중 오류 발생: {str(e)}")
+            error_msg = f"재무제표 데이터 크롤링 중 오류 발생: {str(e)}"
+            logger.exception(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "data": []
+            }
 
 # 싱글톤 인스턴스 생성
 financial_scheduler = FinancialDataScheduler() 

@@ -1,6 +1,5 @@
 import logging
 from typing import Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.service.financial_statement_service import FinancialStatementService
 
 logger = logging.getLogger(__name__)
@@ -12,13 +11,9 @@ class AutoCrawlService:
     스케줄러나 수동 실행 요청에 의해 호출될 수 있습니다.
     """
     
-    def __init__(self, db_session: AsyncSession):
-        """
-        Args:
-            db_session: 데이터베이스 세션
-        """
-        self.db_session = db_session
-        self.statement_service = FinancialStatementService(db_session)
+    def __init__(self):
+        """서비스 초기화"""
+        self.statement_service = FinancialStatementService()
         logger.info("AutoCrawlService가 초기화되었습니다.")
     
     async def execute_crawl(self) -> Dict[str, Any]:

@@ -1,15 +1,9 @@
-from fastapi import APIRouter, Request, Query, Body
+from fastapi import APIRouter, Request, Query, Body, Depends, HTTPException
 import logging
 from app.domain.controller.fin_controller import FinController
-from app.foundation.infra.database.database import get_db_session
-from app.domain.model.schema.schema import (
-    CompanyNameRequest,
-        
-)
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.domain.service.fin_service import FinService
+from typing import Dict, Any, Optional, List
 from app.foundation.infra.scheduler.financial_scheduler import financial_scheduler
-from typing import Optional, List
 
 # 로거 설정
 logger = logging.getLogger("fin_router")
@@ -17,38 +11,75 @@ logger.setLevel(logging.INFO)
 router = APIRouter()
 
 # GET
-@router.get("/financial", summary="모든 회사 목록 조회")
-async def get_all_companies():
+@router.get("/company/{company_name}")
+async def get_company_info(company_name: str) -> Dict[str, Any]:
     """
-    등록된 모든 회사의 목록을 조회합니다.
-    """
-    print("📋 모든 회사 목록 조회")
-    logger.info("📋 모든 회사 목록 조회")
+    회사 정보를 조회합니다.
     
-    # 샘플 데이터
-    companies = [
-        {"id": 1, "name": "샘플전자", "industry": "전자제품"},
-        {"id": 2, "name": "테스트기업", "industry": "소프트웨어"},
-        {"id": 3, "name": "예시주식", "industry": "금융"}
-    ]
-    return {"companies": companies}
+    Args:
+        company_name: 회사명
+        
+    Returns:
+        Dict: 회사 정보
+    """
+    controller = FinController(FinService())
+    return await controller.get_company_info(company_name)
+
+@router.get("/financial/{company_name}")
+async def get_financial_data(
+    company_name: str,
+    year: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    재무제표 데이터를 조회합니다.
+    
+    Args:
+        company_name: 회사명
+        year: 연도 (없으면 최근 3년)
+        
+    Returns:
+        Dict: 재무제표 데이터
+    """
+    controller = FinController(FinService())
+    return await controller.get_financial_data(company_name, year)
+
+@router.post("/financial")
+async def save_financial_data(
+    company_name: str,
+    year: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    재무제표 데이터를 저장합니다.
+    
+    Args:
+        company_name: 회사명
+        year: 연도 (없으면 최근 3년)
+        
+    Returns:
+        Dict: 저장 결과
+    """
+    controller = FinController(FinService())
+    return await controller.save_financial_data(company_name, year)
+
+@router.get("/auto-crawl")
+async def execute_auto_crawl() -> Dict[str, Any]:
+    """
+    자동 크롤링을 실행합니다.
+    
+    Returns:
+        Dict: 실행 결과
+    """
+    controller = FinController(FinService())
+    return await controller.execute_auto_crawl()
 
 # POST
-@router.post("/financial", summary="회사명으로 재무제표 크롤링")
-async def get_financial_by_name(
-    payload: CompanyNameRequest,
-    db: AsyncSession = Depends(get_db_session)
+@router.post("/crawl", summary="재무제표 크롤링")
+async def crawl_financial(
+    company_name: str = Query(..., description="회사명"),
+    year: Optional[int] = Query(None, description="크롤링할 연도. 지정하지 않으면 직전 연도의 데이터를 크롤링")
 ):
-    """
-    회사명으로 재무제표를 크롤링하고 저장합니다.
-    - DART API를 통해 재무제표 데이터를 가져옵니다.
-    - 가져온 데이터를 데이터베이스에 저장합니다.
-    - 크롤링 성공/실패 여부를 반환합니다.
-    """
-    print(f"🕞🕞🕞🕞🕞🕞get_financial_by_name 호출 - 회사명: {payload.company_name}")
-    logger.info(f"🕞🕞🕞🕞🕞🕞get_financial_by_name 호출 - 회사명: {payload.company_name}")
-    controller = FinController(db)
-    return await controller.get_financial(company_name=payload.company_name)
+    """회사명으로 재무제표를 크롤링합니다."""
+    return await fin_controller.crawl_financial(company_name, year) 
 
 # 크롤링 수동 실행 엔드포인트
 @router.post("/financial/crawl-now", summary="재무제표 크롤링 즉시 실행")

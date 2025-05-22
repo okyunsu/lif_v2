@@ -115,6 +115,37 @@ class DartApiService:
             logger.error(f"회사 정보 조회 실패: {str(e)}")
             raise
 
+    async def get_company_info(self, corp_code: str) -> Optional[CompanySchema]:
+        """회사 코드로 회사 정보를 조회합니다."""
+        logger.info(f"회사 정보 조회 시작 (corp_code: {corp_code})")
+        
+        try:
+            content = await self._make_api_request(self.endpoints["CORP_CODE"], {"crtfc_key": self.api_key})
+            with zipfile.ZipFile(BytesIO(content)) as zip_file:
+                with zip_file.open('CORPCODE.xml') as xml_file:
+                    tree = ET.parse(xml_file)
+                    root = tree.getroot()
+                    
+                    # 회사 코드로 회사 정보 검색
+                    company = root.find(f'.//list[corp_code="{corp_code}"]')
+                    if company is not None:
+                        now = datetime.now().isoformat()
+                        result = CompanySchema(
+                            corp_code=corp_code,
+                            corp_name=company.findtext('corp_name'),
+                            stock_code=company.findtext('stock_code') or "",
+                            created_at=now,
+                            updated_at=now
+                        )
+                        logger.info(f"회사 정보를 찾았습니다: {result.corp_name}")
+                        return result
+                    
+                    logger.error(f"회사 코드 '{corp_code}'에 해당하는 회사를 찾을 수 없습니다.")
+                    return None
+        except Exception as e:
+            logger.error(f"회사 정보 조회 실패: {str(e)}")
+            return None
+
     async def fetch_financial_statements(self, corp_code: str, year: Optional[int] = None) -> List[Dict[str, Any]]:
         """DART API에서 재무제표 데이터를 조회합니다."""
         logger.info(f"재무제표 조회 시작 - corp_code: {corp_code}, year: {year}")

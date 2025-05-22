@@ -1,6 +1,5 @@
 import logging
 from typing import Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.foundation.core.config.settings import settings
 from app.domain.service.company_info_service import CompanyInfoService
@@ -40,7 +39,6 @@ class FinService:
     """
     def __init__(
         self, 
-        db_session: AsyncSession,
         company_service: Optional[CompanyInfoService] = None,
         statement_service: Optional[FinancialStatementService] = None
     ):
@@ -48,7 +46,6 @@ class FinService:
         서비스 초기화
         
         Args:
-            db_session: 데이터베이스 세션
             company_service: 회사 정보 서비스 (없으면 새로 생성)
             statement_service: 재무제표 서비스 (없으면 새로 생성)
         """
@@ -58,10 +55,8 @@ class FinService:
             raise ValueError("DART API 키가 필요합니다. 환경 변수 DART_API_KEY를 설정하세요.")
             
         # 서비스 초기화
-        self.db_session = db_session
-        self.company_service = company_service or CompanyInfoService(db_session)
+        self.company_service = company_service or CompanyInfoService()
         self.statement_service = statement_service or FinancialStatementService(
-            db_session,
             company_service=self.company_service
         )
         

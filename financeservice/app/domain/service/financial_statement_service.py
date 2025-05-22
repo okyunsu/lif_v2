@@ -1,19 +1,21 @@
 from typing import Dict, Any, List, Optional, Tuple
 import logging
 import asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
 from app.domain.model.schema.company_schema import CompanySchema
 from app.domain.repository.fin_repository import (
     save_financial_statements,
     get_existing_years,
-    check_existing_data,
-    get_financial_data
+    get_financial_data,
+    get_financial_statements,
+    get_key_financial_items,
+    get_statement_summary,
+    get_financial_statements_by_corp_code,
+    save_financial_ratios
 )
 from app.domain.service.dart_api_service import DartApiService
 from app.domain.service.financial_data_processor import FinancialDataProcessor
-from app.domain.service.company_info_service import CompanyInfoService
 from app.domain.service.financial_data_formatter import FinancialDataFormatter
 
 logger = logging.getLogger(__name__)
@@ -32,31 +34,15 @@ class FinancialStatementService:
     """
     
     def __init__(
-        self, 
-        db_session: AsyncSession,
-        company_service: Optional[CompanyInfoService] = None,
-        dart_api_service: Optional[DartApiService] = None,
+        self,
+        dart_api: Optional[DartApiService] = None,
         data_processor: Optional[FinancialDataProcessor] = None,
         data_formatter: Optional[FinancialDataFormatter] = None
     ):
-        """
-        서비스 초기화
-        
-        Args:
-            db_session: 데이터베이스 세션
-            company_service: 회사 정보 서비스 (없으면 새로 생성)
-            dart_api_service: DART API 서비스 (없으면 새로 생성)
-            data_processor: 데이터 처리기 (없으면 새로 생성)
-            data_formatter: 데이터 포맷터 (없으면 새로 생성)
-        """
-        self.db_session = db_session
-        
-        # 의존성 주입 또는 생성
-        self.dart_api = dart_api_service or DartApiService()
+        """의존성 주입을 통한 초기화"""
+        self.dart_api = dart_api or DartApiService()
         self.data_processor = data_processor or FinancialDataProcessor()
-        self.company_service = company_service or CompanyInfoService(db_session, self.dart_api)
         self.data_formatter = data_formatter or FinancialDataFormatter()
-        
         logger.info("FinancialStatementService가 초기화되었습니다.")
 
     async def auto_crawl_financial_data(self) -> Dict[str, Any]:
@@ -119,7 +105,7 @@ class FinancialStatementService:
                 logger.info(f"[{idx+1}/{len(companies)}] {company.corp_name} 처리 중...")
                 
                 # 1. 기존 데이터 확인
-                existing_years = await get_existing_years(self.db_session, company.corp_name)
+                existing_years = await get_existing_years(company.corp_name)
                 
                 # 2. 새로운 보고서 확인
                 has_new_report = await self.dart_api.check_new_report_available(
@@ -246,138 +232,157 @@ class FinancialStatementService:
 
     async def fetch_and_save_financial_data(self, company_name: str, year: Optional[int] = None) -> Dict[str, Any]:
         """
-        회사명으로 재무제표 데이터를 조회하고 저장합니다.
+        재무제표 데이터를 가져와 저장합니다.
         
         Args:
             company_name: 회사명
-            year: 조회할 연도 (None인 경우 최근 연도)
+            year: 연도 (없으면 최근 3년)
             
         Returns:
-            Dict: 조회 및 저장 결과
-            {
-                "status": "success" | "error",
-                "message": str,
-                "data": List[Dict] - 저장된 재무제표 데이터
-            }
+            Dict: 처리 결과
         """
         try:
-            # 1. 회사 정보 조회
-            company_info = await self.company_service.get_company_info(company_name)
-            
-            # 2. 기존 데이터 확인
-            existing_data = await check_existing_data(self.db_session, company_name, year)
+            # 1. 기존 데이터 확인
+            existing_data = await get_financial_data(company_name, year)
             if existing_data:
-                logger.info(f"기존 데이터가 존재합니다: {company_name}, 연도: {year}")
+                logger.info(f"기존 데이터가 있습니다: {company_name} ({year if year else '전체'})")
                 return {
                     "status": "success",
-                    "message": f"{company_name}의 재무제표 데이터가 이미 존재합니다.",
+                    "message": "기존 데이터가 있습니다.",
                     "data": existing_data
                 }
             
-            # 3. DART API에서 재무제표 데이터 조회
-            statements = await self._fetch_financial_statements(company_info, year)
+            # 2. 회사 정보 조회
+            company = await self.dart_api.fetch_company_info(company_name)
+            if not company:
+                return {
+                    "status": "error",
+                    "message": "회사 정보를 찾을 수 없습니다."
+                }
+            
+            # 3. DART API에서 데이터 가져오기
+            statements = await self.dart_api.fetch_financial_statements(company.corp_code, year)
             if not statements:
                 return {
                     "status": "error",
-                    "message": f"{company_name}의 재무제표 데이터를 찾을 수 없습니다.",
-                    "data": []
+                    "message": "재무제표 데이터를 찾을 수 없습니다."
                 }
             
-            # 4. 데이터 처리 및 저장
-            processed_statements = await self._process_and_save_statements(statements, company_info)
+            # 4. 데이터 저장
+            success = await save_financial_statements(statements)
+            if not success:
+                return {
+                    "status": "error",
+                    "message": "재무제표 데이터 저장에 실패했습니다."
+                }
             
-            # 5. 저장된 데이터 조회하여 반환
-            saved_data = await get_financial_data(self.db_session, company_name, year)
-            
-            logger.info(f"{company_name}의 재무제표 데이터 저장 성공 (항목 {len(saved_data)}개)")
             return {
                 "status": "success",
-                "message": f"{company_name}의 재무제표 데이터가 성공적으로 저장되었습니다.",
-                "data": saved_data
+                "message": "재무제표 데이터가 저장되었습니다.",
+                "data": statements
             }
             
         except Exception as e:
-            logger.error(f"{company_name}의 재무제표 데이터 저장 실패: {str(e)}")
+            logger.error(f"재무제표 데이터 처리 중 오류 발생: {str(e)}")
             return {
                 "status": "error",
-                "message": str(e),
-                "data": []
+                "message": f"재무제표 데이터 처리 중 오류가 발생했습니다: {str(e)}"
             }
-    
-    async def _fetch_financial_statements(self, company_info: CompanySchema, year: Optional[int]) -> List[Dict[str, Any]]:
-        """
-        DART API에서 재무제표 데이터를 조회합니다.
-        
-        Args:
-            company_info: 회사 정보
-            year: 조회할 연도
-            
-        Returns:
-            List[Dict]: 조회된 재무제표 데이터
-        """
-        logger.info(f"{company_info.corp_name}의 재무제표 조회 시작 (corp_code: {company_info.corp_code}, year: {year})")
-        statements = await self.dart_api.fetch_financial_statements(company_info.corp_code, year)
-        
-        if not statements:
-            logger.warning(f"{company_info.corp_name}의 재무제표 데이터를 찾을 수 없습니다. (corp_code: {company_info.corp_code}, year: {year})")
-            
-        return statements
-    
-    async def _process_and_save_statements(self, statements: List[Dict[str, Any]], company_info: CompanySchema) -> List[Dict[str, Any]]:
-        """
-        재무제표 데이터를 처리하고 저장합니다.
-        
-        Args:
-            statements: 원시 재무제표 데이터
-            company_info: 회사 정보
-            
-        Returns:
-            List[Dict]: 처리된 재무제표 데이터
-        """
-        # 1. 데이터 처리
-        processed_statements = await self.data_processor.process_raw_statements(statements, company_info)
-        
-        # 2. 저장
-        await save_financial_statements(self.db_session, processed_statements)
-        
-        return processed_statements
 
     async def get_formatted_financial_data(self, company_name: str, year: Optional[int] = None) -> Dict[str, Any]:
         """
-        회사명으로 재무제표 데이터를 조회하고 포맷팅하여 반환합니다.
+        저장된 재무제표 데이터를 조회합니다.
         
         Args:
             company_name: 회사명
-            year: 조회할 연도 (None인 경우 최근 연도)
+            year: 연도 (없으면 최근 3년)
             
         Returns:
-            Dict: 포맷팅된 재무제표 데이터
-            {
-                "status": "success" | "error",
-                "message": str,
-                "data": List[Dict] - 포맷팅된 재무제표 데이터
-            }
+            Dict: 재무제표 데이터
         """
         try:
-            # 1. 데이터 조회 및 저장
-            data = await self.fetch_and_save_financial_data(company_name, year)
-            
-            # 2. 조회 실패 시 빈 데이터 반환
-            if data["status"] == "error" or not data.get("data"):
-                logger.warning(f"{company_name}의 재무제표 데이터를 찾을 수 없습니다.")
+            # 1. 데이터 조회
+            data = await get_financial_data(company_name, year)
+            if not data:
                 return {
                     "status": "error",
-                    "message": "재무제표가 존재하지 않습니다.",
-                    "data": []
+                    "message": "재무제표 데이터를 찾을 수 없습니다."
                 }
             
-            # 3. 재무제표 데이터 포맷팅
-            return await self.data_formatter.format_financial_data(data["data"])
+            # 2. 데이터 포맷팅
+            formatted_data = self.data_formatter.format_financial_data(data)
+            
+            return {
+                "status": "success",
+                "message": "재무제표 데이터를 조회했습니다.",
+                "data": formatted_data
+            }
             
         except Exception as e:
-            logger.error(f"재무제표 데이터 포맷팅 실패: {str(e)}")
+            logger.error(f"재무제표 데이터 조회 중 오류 발생: {str(e)}")
             return {
                 "status": "error",
-                "message": f"재무제표 데이터 조회 실패: {str(e)}",
-                "data": []
+                "message": f"재무제표 데이터 조회 중 오류가 발생했습니다: {str(e)}"
             }
+
+    async def get_financial_statements(
+        self,
+        company_name: str,
+        year: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """재무제표 데이터를 조회합니다."""
+        try:
+            # 1. DB에서 데이터 조회
+            statements = await get_financial_statements(company_name=company_name, year=year)
+            
+            # 2. DB에 데이터가 없으면 DART API에서 조회
+            if not statements:
+                logger.info(f"DB에 데이터가 없어 DART API에서 조회합니다: {company_name}")
+                statements = await self.dart_api.get_financial_statements(company_name, year)
+                
+                if statements:
+                    # 3. DART API에서 조회한 데이터를 DB에 저장
+                    await save_financial_statements(statements)
+            
+            # 4. 데이터 가공 및 포맷팅
+            processed_data = self.data_processor.process_financial_statements(statements)
+            formatted_data = self.data_formatter.format_financial_data(processed_data)
+            
+            return formatted_data
+        except Exception as e:
+            logger.error(f"재무제표 데이터 조회 중 오류 발생: {str(e)}")
+            return []
+
+    async def get_key_financial_items(self, company_name: str = None) -> List[Dict[str, Any]]:
+        """주요 재무 항목을 조회합니다."""
+        try:
+            items = await get_key_financial_items(company_name)
+            return self.data_formatter.format_financial_data(items)
+        except Exception as e:
+            logger.error(f"주요 재무 항목 조회 중 오류 발생: {str(e)}")
+            return []
+
+    async def get_statement_summary(self) -> List[Dict[str, Any]]:
+        """회사별 재무제표 종류와 데이터 수를 조회합니다."""
+        try:
+            return await get_statement_summary()
+        except Exception as e:
+            logger.error(f"재무제표 요약 조회 중 오류 발생: {str(e)}")
+            return []
+
+    async def get_financial_statements_by_corp_code(self, corp_code: str) -> List[Dict[str, Any]]:
+        """회사 코드로 재무제표 데이터를 조회합니다."""
+        try:
+            statements = await get_financial_statements_by_corp_code(corp_code)
+            return self.data_formatter.format_financial_data(statements)
+        except Exception as e:
+            logger.error(f"재무제표 데이터 조회 중 오류 발생: {str(e)}")
+            return []
+
+    async def save_financial_ratios(self, ratios: Dict[str, Any]) -> None:
+        """재무비율을 저장합니다."""
+        try:
+            await save_financial_ratios(ratios)
+        except Exception as e:
+            logger.error(f"재무비율 저장 중 오류 발생: {str(e)}")
+            raise
